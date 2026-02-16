@@ -1,0 +1,16 @@
+cmake
+curl
+fluid-synth
+gnu-tar
+libpng
+libslirp
+meson
+ninja
+opusfile
+patchutils
+pcre 
+pkg-config
+readline
+speexdsp
+wget
+ffmpeg
