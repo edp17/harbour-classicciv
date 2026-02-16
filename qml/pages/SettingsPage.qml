@@ -4,6 +4,9 @@ import Sailfish.Silica 1.0
 Page {
     allowedOrientations: Orientation.LandscapeMask | Orientation.PortraitMask
 
+    property var windowResOptions: ["original", "desktop", "1280x720", "1920x1080"]
+    property var scalerOptions: ["normal", "normal2x", "normal3x", "hq2x", "none"]
+
     SilicaFlickable {
         anchors.fill: parent
         contentHeight: col.height + Theme.paddingLarge
@@ -22,20 +25,55 @@ Page {
                 width: parent.width - 2*x
                 label: "CPU cycles (auto / number)"
                 text: runner.cycles
-                onTextChanged: runner.cycles = text
+
+                onTextChanged: {
+                    if (runner.cycles !== text)
+                        runner.cycles = text
+                }
             }
 
             ComboBox {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2*x
                 label: "Window resolution"
+
+                currentIndex: Math.max(0, windowResOptions.indexOf(runner.windowRes))
+
                 menu: ContextMenu {
-                    MenuItem { text: "original"; onClicked: runner.windowRes = "original" }
-                    MenuItem { text: "desktop";  onClicked: runner.windowRes = "desktop" }
-                    MenuItem { text: "1280x720"; onClicked: runner.windowRes = "1280x720" }
-                    MenuItem { text: "1920x1080"; onClicked: runner.windowRes = "1920x1080" }
+                    Repeater {
+                        model: windowResOptions
+                        MenuItem {
+                            text: modelData
+                        }
+                    }
                 }
-                description: runner.windowRes
+
+                onCurrentIndexChanged: {
+                    var v = windowResOptions[currentIndex]
+                    if (runner.windowRes !== v)
+                        runner.windowRes = v
+                }
+            }
+
+            ComboBox {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2*x
+                label: "Scaler"
+
+                currentIndex: Math.max(0, scalerOptions.indexOf(runner.scaler))
+
+                menu: ContextMenu {
+                    Repeater {
+                        model: scalerOptions
+                        MenuItem { text: modelData }
+                    }
+                }
+
+                onCurrentIndexChanged: {
+                    var v = scalerOptions[currentIndex]
+                    if (runner.scaler !== v)
+                        runner.scaler = v
+                }
             }
 
             Label {

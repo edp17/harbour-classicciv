@@ -52,6 +52,11 @@ private:
     bool writeConfigFile(QString *outError = nullptr) const;
     static bool fileExistsCaseInsensitive(const QString &dirPath, const QString &fileName, QString *outActualName = nullptr);
 
+    QString settingsIniPath() const;
+    void loadSettings();
+    void saveSetting(const QString &key, const QVariant &value) const;
+    void rewriteConfigNow();
+
 private:
     mutable QProcess m_proc;
     QString m_cycles = QStringLiteral("auto");       // or "3000", etc.

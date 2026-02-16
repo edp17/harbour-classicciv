@@ -9,15 +9,66 @@
 #include <QUrl>
 #include <QSettings>
 
+static QSettings makeSettings()
+{
+    const QString cfgBase =
+            QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    QDir().mkpath(cfgBase);
+    return QSettings(QDir(cfgBase).filePath("settings.ini"), QSettings::IniFormat);
+}
+
 // Constructor
 DosboxRunner::DosboxRunner(QObject *parent)
     : QObject(parent)
 {
-    // Ensure civ dir exists
     QDir().mkpath(civDir());
 
-    QSettings st;
-    m_windowRes = st.value(QStringLiteral("dosbox/windowRes"), QStringLiteral("original")).toString();
+    QSettings st = makeSettings();
+    m_cycles    = st.value(QStringLiteral("dosbox/cycles"),
+                           QStringLiteral("auto")).toString();
+    m_scaler    = st.value(QStringLiteral("dosbox/scaler"),
+                           QStringLiteral("normal2x")).toString();
+    m_windowRes = st.value(QStringLiteral("dosbox/windowRes"),
+                           QStringLiteral("original")).toString();
+}
+
+void DosboxRunner::rewriteConfigNow()
+{
+    QString err;
+    // Only write if game is ready; otherwise don't overwrite with unusable mount
+    if (!gameReady())
+        return;
+
+    writeConfigFile(&err);
+    // If you want to debug:
+    // if (!err.isEmpty()) qWarning() << "dosbox.conf write:" << err;
+}
+
+QString DosboxRunner::settingsIniPath() const
+{
+    const QString cfgBase =
+        QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    QDir().mkpath(cfgBase);
+    return QDir(cfgBase).filePath(QStringLiteral("settings.ini"));
+}
+
+void DosboxRunner::loadSettings()
+{
+    QSettings st(settingsIniPath(), QSettings::IniFormat);
+    st.beginGroup(QStringLiteral("dosbox"));
+    m_windowRes = st.value(QStringLiteral("windowRes"), QStringLiteral("original")).toString();
+    m_cycles    = st.value(QStringLiteral("cycles"),    QStringLiteral("auto")).toString();
+    m_scaler    = st.value(QStringLiteral("scaler"),    QStringLiteral("normal2x")).toString();
+    st.endGroup();
+}
+
+void DosboxRunner::saveSetting(const QString &key, const QVariant &value) const
+{
+    QSettings st(settingsIniPath(), QSettings::IniFormat);
+    st.beginGroup(QStringLiteral("dosbox"));
+    st.setValue(key, value);
+    st.endGroup();
+    st.sync();
 }
 
 QString DosboxRunner::windowRes() const
@@ -33,10 +84,11 @@ void DosboxRunner::setWindowRes(const QString &value)
 
     m_windowRes = v;
 
-    QSettings st;
+    QSettings st = makeSettings();
     st.setValue(QStringLiteral("dosbox/windowRes"), m_windowRes);
 
     emit windowResChanged();
+    rewriteConfigNow();
 }
 
 QString DosboxRunner::civDir() const
@@ -53,16 +105,32 @@ bool DosboxRunner::gameReady() const
 
 void DosboxRunner::setCycles(const QString &v)
 {
-    if (m_cycles == v) return;
-    m_cycles = v.trimmed();
+    const QString nv = v.trimmed();
+    if (nv.isEmpty() || nv == m_cycles)
+        return;
+
+    m_cycles = nv;
+
+    QSettings st = makeSettings();
+    st.setValue(QStringLiteral("dosbox/cycles"), m_cycles);
+
     emit settingsChanged();
+    rewriteConfigNow();
 }
 
 void DosboxRunner::setScaler(const QString &v)
 {
-    if (m_scaler == v) return;
-    m_scaler = v.trimmed();
+    const QString nv = v.trimmed();
+    if (nv.isEmpty() || nv == m_scaler)
+        return;
+
+    m_scaler = nv;
+
+    QSettings st = makeSettings();
+    st.setValue(QStringLiteral("dosbox/scaler"), m_scaler);
+
     emit settingsChanged();
+    rewriteConfigNow();
 }
 
 void DosboxRunner::rescan()
@@ -133,8 +201,7 @@ bool DosboxRunner::writeConfigFile(QString *outError) const
     // --- Render ---
     s << "[render]\n";
     s << "aspect=true\n";
-    // Optional but useful on phones; add a bool property later if you want a toggle:
-    // s << "integer_scaling=true\n";
+    s << "scaler=" << m_scaler << "\n";
     s << "\n";
 
     // --- Mouse (sensitivity moved here) ---
