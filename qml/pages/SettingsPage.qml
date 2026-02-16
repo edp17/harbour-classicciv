@@ -28,14 +28,14 @@ Page {
             ComboBox {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2*x
-                label: "Scaler"
+                label: "Window resolution"
                 menu: ContextMenu {
-                    MenuItem { text: "normal";    onClicked: runner.scaler = "normal" }
-                    MenuItem { text: "normal2x";  onClicked: runner.scaler = "normal2x" }
-                    MenuItem { text: "advmame2x"; onClicked: runner.scaler = "advmame2x" }
+                    MenuItem { text: "original"; onClicked: runner.windowRes = "original" }
+                    MenuItem { text: "desktop";  onClicked: runner.windowRes = "desktop" }
+                    MenuItem { text: "1280x720"; onClicked: runner.windowRes = "1280x720" }
+                    MenuItem { text: "1920x1080"; onClicked: runner.windowRes = "1920x1080" }
                 }
-                // show current choice
-                description: runner.scaler
+                description: runner.windowRes
             }
 
             Label {

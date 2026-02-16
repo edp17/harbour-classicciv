@@ -7,12 +7,36 @@
 #include <QTextStream>
 #include <QDesktopServices>
 #include <QUrl>
+#include <QSettings>
 
+// Constructor
 DosboxRunner::DosboxRunner(QObject *parent)
     : QObject(parent)
 {
     // Ensure civ dir exists
     QDir().mkpath(civDir());
+
+    QSettings st;
+    m_windowRes = st.value(QStringLiteral("dosbox/windowRes"), QStringLiteral("original")).toString();
+}
+
+QString DosboxRunner::windowRes() const
+{
+    return m_windowRes;
+}
+
+void DosboxRunner::setWindowRes(const QString &value)
+{
+    const QString v = value.trimmed();
+    if (v.isEmpty() || v == m_windowRes)
+        return;
+
+    m_windowRes = v;
+
+    QSettings st;
+    st.setValue(QStringLiteral("dosbox/windowRes"), m_windowRes);
+
+    emit windowResChanged();
 }
 
 QString DosboxRunner::civDir() const
@@ -97,33 +121,40 @@ bool DosboxRunner::writeConfigFile(QString *outError) const
 
     QTextStream s(&f);
 
-    // Minimal, safe defaults. Tune later.
+    // --- SDL / video ---
     s << "[sdl]\n";
     s << "fullscreen=true\n";
-    s << "fulldouble=false\n";
     s << "fullresolution=original\n";
-    s << "windowresolution=original\n";
+    // dosbox-staging recommends windowresolution/viewport instead of software scalers
+    s << "windowresolution=" << m_windowRes << "\n";   // e.g. "original", "desktop", "1280x720"
     s << "output=texture\n";
-    s << "autolock=true\n";
-    s << "sensitivity=100\n";
     s << "\n";
 
+    // --- Render ---
     s << "[render]\n";
     s << "aspect=true\n";
-    s << "scaler=" << m_scaler << "\n";
+    // Optional but useful on phones; add a bool property later if you want a toggle:
+    // s << "integer_scaling=true\n";
     s << "\n";
 
+    // --- Mouse (sensitivity moved here) ---
+    s << "[mouse]\n";
+    s << "mouse_sensitivity=100\n";
+    s << "\n";
+
+    // --- CPU (use cpu_cycles instead of cycles) ---
     s << "[cpu]\n";
     s << "core=auto\n";
-    s << "cycles=" << m_cycles << "\n";
+    s << "cpu_cycles=" << m_cycles << "\n"; // allow "auto" or a number string
     s << "\n";
 
+    // --- Mixer ---
     s << "[mixer]\n";
     s << "nosound=false\n";
     s << "\n";
 
+    // --- Autoexec ---
     s << "[autoexec]\n";
-    // DOSBox expects host paths; quoting helps with spaces.
     s << "mount c \"" << civDir() << "\"\n";
     s << "c:\n";
     s << "CIV.EXE\n";
