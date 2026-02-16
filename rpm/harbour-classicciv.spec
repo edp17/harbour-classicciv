@@ -1,6 +1,6 @@
 Name:       harbour-classicciv
 Version:    0.1.0
-Release:    2
+Release:    3
 Summary:    DOS runner for Civilization (requires original game files)
 License:    GPL-2.0-or-later
 Group:      Applications/Games

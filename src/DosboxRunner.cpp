@@ -191,28 +191,31 @@ bool DosboxRunner::writeConfigFile(QString *outError) const
 
     // --- SDL / video ---
     s << "[sdl]\n";
-    s << "fullscreen=true\n";
-    s << "fullresolution=original\n";
-    // dosbox-staging recommends windowresolution/viewport instead of software scalers
-    s << "windowresolution=" << m_windowRes << "\n";   // e.g. "original", "desktop", "1280x720"
+    s << "fullscreen=" << (m_fullscreen ? "true" : "false") << "\n";
+    s << "fullresolution=" << (m_fullscreenRes.isEmpty() ? "desktop" : m_fullscreenRes) << "\n";
+    s << "windowresolution=" << (m_windowRes.isEmpty() ? "desktop" : m_windowRes) << "\n";
     s << "output=texture\n";
     s << "\n";
 
     // --- Render ---
     s << "[render]\n";
     s << "aspect=true\n";
-    s << "scaler=" << m_scaler << "\n";
+    s << "integer_scaling=" << (m_integerScaling ? "true" : "false") << "\n";
+    if (!m_viewport.isEmpty())
+        s << "viewport=" << m_viewport << "\n";
+    // Keep for now; still accepted but deprecated (your warning confirms this)
+    s << "scaler=" << (m_scaler.isEmpty() ? "normal2x" : m_scaler) << "\n";
     s << "\n";
 
     // --- Mouse (sensitivity moved here) ---
     s << "[mouse]\n";
-    s << "mouse_sensitivity=100\n";
+    s << "mouse_sensitivity=" << m_mouseSensitivity << "\n";
     s << "\n";
 
     // --- CPU (use cpu_cycles instead of cycles) ---
     s << "[cpu]\n";
     s << "core=auto\n";
-    s << "cpu_cycles=" << m_cycles << "\n"; // allow "auto" or a number string
+    s << "cpu_cycles=" << (m_cycles.isEmpty() ? "auto" : m_cycles) << "\n";
     s << "\n";
 
     // --- Mixer ---
@@ -248,8 +251,10 @@ bool DosboxRunner::launch()
     }
 
     QStringList args;
-    args << "-conf" << configPath();
-    args << "-noconsole";
+    args << "--noprimaryconf"
+         << "--nolocalconf"
+         << "--conf" << configPath()
+         << "--noconsole";
 
     // Ensure process sees Civ directory
     m_proc.setWorkingDirectory(civDir());

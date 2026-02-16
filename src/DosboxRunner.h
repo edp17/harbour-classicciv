@@ -59,7 +59,18 @@ private:
 
 private:
     mutable QProcess m_proc;
-    QString m_cycles = QStringLiteral("auto");       // or "3000", etc.
-    QString m_scaler = QStringLiteral("normal2x");   // good default for phones
-    QString m_windowRes = QStringLiteral("original");
+    // Video / scaling
+    bool m_fullscreen = false;
+    QString m_fullscreenRes;        // empty -> default to "desktop"
+    QString m_windowRes = "original";
+    bool m_integerScaling = false;
+    QString m_viewport;             // empty means don't write it
+
+    // Legacy / compatibility (keep for now)
+    QString m_scaler = "normal2x";  // still accepted but deprecated
+    QString m_cycles = "auto";      // deprecated but accepted
+
+    // Mouse
+    int m_mouseSensitivity = 100;
+
 };
