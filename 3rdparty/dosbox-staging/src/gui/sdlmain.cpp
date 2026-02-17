@@ -76,6 +76,9 @@
 #include "vga.h"
 #include "video.h"
 
+extern "C" void CONTROL_Socket_Start();
+extern "C" void CONTROL_Socket_Stop();
+
 static void switch_console_to_utf8()
 {
 #if WIN32
@@ -308,6 +311,7 @@ void OPENGL_ERROR(const char*) {
 static void QuitSDL()
 {
 	if (sdl.initialized) {
+CONTROL_Socket_Stop();
 #if !C_DEBUG
 		SDL_Quit();
 #endif
@@ -4951,6 +4955,7 @@ int sdl_main(int argc, char* argv[])
 		}
 
 		sdl.initialized = true;
+CONTROL_Socket_Start();
 
 		SDL_version sdl_version = {};
 		SDL_GetVersion(&sdl_version);

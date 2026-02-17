@@ -200,7 +200,7 @@ bool DosboxRunner::writeConfigFile(QString *outError) const
     // --- Render ---
     s << "[render]\n";
     s << "aspect=true\n";
-    s << "integer_scaling=" << (m_integerScaling ? "true" : "false") << "\n";
+    s << "integer_scaling=" << (m_integerScaling ? "on" : "off") << "\n";
     if (!m_viewport.isEmpty())
         s << "viewport=" << m_viewport << "\n";
     // Keep for now; still accepted but deprecated (your warning confirms this)
@@ -215,7 +215,7 @@ bool DosboxRunner::writeConfigFile(QString *outError) const
     // --- CPU (use cpu_cycles instead of cycles) ---
     s << "[cpu]\n";
     s << "core=auto\n";
-    s << "cpu_cycles=" << (m_cycles.isEmpty() ? "auto" : m_cycles) << "\n";
+    s << "cycles=" << (m_cycles.isEmpty() ? "auto" : m_cycles) << "\n";
     s << "\n";
 
     // --- Mixer ---
@@ -262,6 +262,8 @@ bool DosboxRunner::launch()
     // Optional: expose touch parameters to your patched DOSBox via env vars.
     // (Patch reads these if present; see section 6.)
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    const QString sock = QDir::temp().filePath("harbour-classicciv.sock");
+    env.insert("DOSBOX_CONTROL_SOCKET", sock);
     env.insert("HARBOUR_CIV_LONGPRESS_MS", "450");
     env.insert("HARBOUR_CIV_TAP_MAX_MS", "220");
     env.insert("HARBOUR_CIV_JITTER_PX", "18");
