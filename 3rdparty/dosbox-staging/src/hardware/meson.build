@@ -75,6 +75,7 @@ libhardware_sources = files(
     'virtualbox.cpp',
     'vmware.cpp',
     'voodoo_stubs.cpp',
+    '../platform/control_socket.cpp',
 )
 
 libhardware = static_library(
