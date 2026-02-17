@@ -151,6 +151,8 @@ Page {
         Rectangle {
             anchors.fill: parent
             color: "#20232a" //Theme.rgba(Theme.primaryColor, 0.10) //Theme.highlightBackgroundColor, 0.18)
+            border.width: 1
+            border.color: Theme.rgba(Theme.primaryColor, 0.18)
         }
 
         // Horizontal scroll for all keyboard rows
