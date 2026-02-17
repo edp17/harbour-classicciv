@@ -1496,11 +1496,9 @@ static SDL_Rect get_desktop_size()
 	int bottom = 0;
 	int right  = 0;
 
-	SDL_GetWindowBordersSize(SDL_GetWindowFromID(sdl.display_number),
-	                         &top,
-	                         &left,
-	                         &bottom,
-	                         &right);
+	if (sdl.window) {
+	    SDL_GetWindowBordersSize(sdl.window, &top, &left, &bottom, &right);
+	}
 
 	// If SDL_GetWindowBordersSize fails, it populates the values with 0.
 	desktop.w -= (left + right);
