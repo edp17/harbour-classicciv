@@ -43,6 +43,11 @@ public:
     Q_INVOKABLE bool mouseMove(int dx, int dy);
     Q_INVOKABLE bool sendControlLine(const QString &line); // useful for debugging
 
+    Q_INVOKABLE bool sendKey(const QString &name);
+    Q_INVOKABLE bool sendKeyDown(const QString &name);
+    Q_INVOKABLE bool sendKeyUp(const QString &name);
+    Q_INVOKABLE bool sendText(const QString &text);
+
 signals:
     void civDirChanged();
     void gameReadyChanged();

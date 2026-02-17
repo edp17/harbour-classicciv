@@ -72,6 +72,95 @@ bool DosboxRunner::sendControlLine(const QString &line)
     return send_to_control_socket(controlSocketPath(), line);
 }
 
+bool DosboxRunner::sendKey(const QString &name)
+{
+    return sendControlLine(("KEY " + name + "\n").toUtf8());
+}
+
+bool DosboxRunner::sendKeyDown(const QString &name)
+{
+    return sendControlLine(("KEYDOWN " + name + "\n").toUtf8());
+}
+
+bool DosboxRunner::sendKeyUp(const QString &name)
+{
+    return sendControlLine(("KEYUP " + name + "\n").toUtf8());
+}
+
+// Minimal ASCII text support: maps characters to KEY commands.
+// Good enough for Civ city names, save names, etc.
+static QString keyNameForChar(QChar c, bool *needsShift)
+{
+    *needsShift = false;
+
+    if (c.isLetter()) {
+        const QChar up = c.toUpper();
+        if (c.isUpper()) *needsShift = true;
+        return QString(up);
+    }
+    if (c.isDigit()) return QString(c);
+
+    switch (c.unicode()) {
+    case ' ': return "SPACE";
+    case '\n': return "ENTER";
+    case '\r': return "ENTER";
+    case '\t': return "TAB";
+    case 0x08: return "BACKSPACE";
+    case '-': return "MINUS";
+    case '=': return "EQUALS";
+    case '[': return "LEFTBRACKET";
+    case ']': return "RIGHTBRACKET";
+    case ';': return "SEMICOLON";
+    case '\'': return "APOSTROPHE";
+    case ',': return "COMMA";
+    case '.': return "PERIOD";
+    case '/': return "SLASH";
+    case '\\': return "BACKSLASH";
+    default:
+        // shifted punctuation (basic set)
+        *needsShift = true;
+        switch (c.unicode()) {
+        case '!': return "1";
+        case '@': return "2";
+        case '#': return "3";
+        case '$': return "4";
+        case '%': return "5";
+        case '^': return "6";
+        case '&': return "7";
+        case '*': return "8";
+        case '(': return "9";
+        case ')': return "0";
+        case '_': return "MINUS";
+        case '+': return "EQUALS";
+        case '{': return "LEFTBRACKET";
+        case '}': return "RIGHTBRACKET";
+        case ':': return "SEMICOLON";
+        case '"': return "APOSTROPHE";
+        case '<': return "COMMA";
+        case '>': return "PERIOD";
+        case '?': return "SLASH";
+        case '|': return "BACKSLASH";
+        default:
+            return QString(); // unsupported
+        }
+    }
+}
+
+bool DosboxRunner::sendText(const QString &text)
+{
+    for (QChar c : text) {
+        bool shift = false;
+        const QString key = keyNameForChar(c, &shift);
+        if (key.isEmpty())
+            continue;
+
+        if (shift) sendKeyDown("LSHIFT");
+        sendKey(key);
+        if (shift) sendKeyUp("LSHIFT");
+    }
+    return true;
+}
+
 bool DosboxRunner::pressKey(const QString &keyName)
 {
     // Civilization will typically respond to key presses, not text.
