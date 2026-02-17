@@ -14,6 +14,49 @@
 
 static std::atomic<bool> g_control_running{false};
 static std::thread g_control_thread;
+static std::string g_sock_path;
+
+static bool parse_scancode_token(const std::string& token, SDL_Scancode& out)
+{
+    if (token.empty())
+        return false;
+
+    // Accept numeric scancode (what you currently send: KEYDOWN 1, etc)
+    bool all_digits = true;
+    for (char c : token) {
+        if (c < '0' || c > '9') { all_digits = false; break; }
+    }
+    if (all_digits) {
+        const int v = std::atoi(token.c_str());
+        if (v <= 0 || v >= SDL_NUM_SCANCODES)
+            return false;
+        out = static_cast<SDL_Scancode>(v);
+        return true;
+    }
+
+    // Accept human-friendly names: "1", "ENTER", "ESCAPE", "F1", ...
+    // SDL recognises many names; case-insensitive in practice for common keys.
+    SDL_Scancode sc = SDL_GetScancodeFromName(token.c_str());
+    if (sc != SDL_SCANCODE_UNKNOWN) {
+        out = sc;
+        return true;
+    }
+
+    // If user passes a single character like "a" or "1" and SDL name lookup fails,
+    // try mapping from keycode.
+    if (token.size() == 1) {
+        SDL_Keycode kc = SDL_GetKeyFromName(token.c_str());
+        if (kc != SDLK_UNKNOWN) {
+            sc = SDL_GetScancodeFromKey(kc);
+            if (sc != SDL_SCANCODE_UNKNOWN) {
+                out = sc;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 
 static int make_unix_server(const std::string &path)
 {
@@ -99,6 +142,7 @@ static SDL_Scancode parse_scancode(const std::string &name)
 
 static void control_loop(std::string sock_path)
 {
+    g_sock_path = sock_path; // remember for Stop()
     const int server_fd = make_unix_server(sock_path);
     if (server_fd < 0)
         return;
@@ -162,6 +206,13 @@ static void control_loop(std::string sock_path)
                     const SDL_Scancode sc = parse_scancode(key);
                     if (sc != SDL_SCANCODE_UNKNOWN)
                         push_key(sc, false);
+                } else if (starts("KEY ")) {
+                    const auto key = line.substr(4);
+                    const SDL_Scancode sc = parse_scancode(key);
+                    if (sc != SDL_SCANCODE_UNKNOWN) {
+                        push_key(sc, true);   // key down
+                        push_key(sc, false);  // key up
+                    }
                 } else if (starts("TEXT ")) {
                     const auto t = line.substr(5);
                     if (!t.empty())
@@ -208,6 +259,22 @@ extern "C" void CONTROL_Socket_Start()
 extern "C" void CONTROL_Socket_Stop()
 {
     g_control_running.store(false);
+
+    // Wake accept() by connecting once
+    if (!g_sock_path.empty()) {
+        int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+        if (fd >= 0) {
+            sockaddr_un addr {};
+            addr.sun_family = AF_UNIX;
+            // use strncpy/memcpy; keeping your memcpy preference:
+            const auto bytes = std::min(g_sock_path.size(), sizeof(addr.sun_path) - 1);
+            std::memcpy(addr.sun_path, g_sock_path.c_str(), bytes);
+            addr.sun_path[bytes] = '\0';
+            ::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+            ::close(fd);
+        }
+    }
+
     if (g_control_thread.joinable())
         g_control_thread.join();
 }
