@@ -48,6 +48,15 @@ Page {
                 enabled: runner.gameReady
                 onClicked: runner.launch()
             }
+
+Button {
+    text: "Send 1"
+    onClicked: runner.pressKey("1")
+}
+Button {
+    text: "Enter"
+    onClicked: runner.pressKey("Return")
+}
         }
     }
 }

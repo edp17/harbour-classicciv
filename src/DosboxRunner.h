@@ -37,6 +37,12 @@ public:
     QString windowRes() const;
     void setWindowRes(const QString &value);
 
+    Q_INVOKABLE bool pressKey(const QString &keyName);
+    Q_INVOKABLE bool typeText(const QString &text);
+    Q_INVOKABLE bool mouseLeftClick();
+    Q_INVOKABLE bool mouseMove(int dx, int dy);
+    Q_INVOKABLE bool sendControlLine(const QString &line); // useful for debugging
+
 signals:
     void civDirChanged();
     void gameReadyChanged();
@@ -72,5 +78,7 @@ private:
 
     // Mouse
     int m_mouseSensitivity = 100;
+
+    QString controlSocketPath() const;
 
 };

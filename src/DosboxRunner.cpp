@@ -8,6 +8,99 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QSettings>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+#include <errno.h>
+#include <cstring>
+
+static bool send_to_control_socket(const QString &path, const QString &line)
+{
+    const QByteArray p = QFile::encodeName(path);
+    const QByteArray msg = (line + "\n").toUtf8();
+
+    int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0)
+        return false;
+
+    sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+
+    if (p.size() >= int(sizeof(addr.sun_path))) {
+        ::close(fd);
+        return false;
+    }
+
+    const int n = p.size();
+    if (n >= int(sizeof(addr.sun_path))) {
+        ::close(fd);
+        return false;
+    }
+    std::memcpy(addr.sun_path, p.constData(), size_t(n));
+    addr.sun_path[n] = '\0';
+
+    if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+        ::close(fd);
+        return false;
+    }
+
+    const char *data = msg.constData();
+    ssize_t left = msg.size();
+    while (left > 0) {
+        const ssize_t n = ::write(fd, data, left);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            ::close(fd);
+            return false;
+        }
+        data += n;
+        left -= n;
+    }
+
+    ::close(fd);
+    return true;
+}
+
+QString DosboxRunner::controlSocketPath() const
+{
+    // Keep in sync with the DOSBox-side socket path you used.
+    return QStringLiteral("/tmp/harbour-classicciv.sock");
+}
+
+bool DosboxRunner::sendControlLine(const QString &line)
+{
+    return send_to_control_socket(controlSocketPath(), line);
+}
+
+bool DosboxRunner::pressKey(const QString &keyName)
+{
+    // Civilization will typically respond to key presses, not text.
+    if (!sendControlLine(QStringLiteral("KEYDOWN %1").arg(keyName)))
+        return false;
+    return sendControlLine(QStringLiteral("KEYUP %1").arg(keyName));
+}
+
+bool DosboxRunner::typeText(const QString &text)
+{
+    // Optional, may not work for Civ’s input model, but useful for later.
+    // Escape newlines to avoid breaking protocol.
+    QString t = text;
+    t.replace('\n', ' ');
+    t.replace('\r', ' ');
+    return sendControlLine(QStringLiteral("TEXT %1").arg(t));
+}
+
+bool DosboxRunner::mouseLeftClick()
+{
+    if (!sendControlLine(QStringLiteral("MOUSEBTN left down")))
+        return false;
+    return sendControlLine(QStringLiteral("MOUSEBTN left up"));
+}
+
+bool DosboxRunner::mouseMove(int dx, int dy)
+{
+    return sendControlLine(QStringLiteral("MOUSEMOVE %1 %2").arg(dx).arg(dy));
+}
 
 static QSettings makeSettings()
 {
