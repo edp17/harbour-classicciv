@@ -62,6 +62,11 @@ static bool send_to_control_socket(const QString &path, const QString &line)
     return true;
 }
 
+QString DosboxRunner::windowRes() const
+{
+    return m_windowRes;
+}
+
 QString DosboxRunner::controlSocketPath() const
 {
     // Must match DOSBOX_CONTROL_SOCKET in launch()
