@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <cstring>
+#include <QTimer>
 
 static bool send_to_control_socket(const QString &path, const QString &line)
 {
@@ -63,8 +64,8 @@ static bool send_to_control_socket(const QString &path, const QString &line)
 
 QString DosboxRunner::controlSocketPath() const
 {
-    // Keep in sync with the DOSBox-side socket path you used.
-    return QStringLiteral("/tmp/harbour-classicciv.sock");
+    // Must match DOSBOX_CONTROL_SOCKET in launch()
+    return QDir::temp().filePath(QStringLiteral("harbour-classicciv.sock"));
 }
 
 bool DosboxRunner::sendControlLine(const QString &line)
@@ -74,17 +75,17 @@ bool DosboxRunner::sendControlLine(const QString &line)
 
 bool DosboxRunner::sendKey(const QString &name)
 {
-    return sendControlLine(("KEY " + name + "\n").toUtf8());
+    return sendControlLine(QStringLiteral("KEY %1").arg(name));
 }
 
 bool DosboxRunner::sendKeyDown(const QString &name)
 {
-    return sendControlLine(("KEYDOWN " + name + "\n").toUtf8());
+    return sendControlLine(QStringLiteral("KEYDOWN %1").arg(name));
 }
 
 bool DosboxRunner::sendKeyUp(const QString &name)
 {
-    return sendControlLine(("KEYUP " + name + "\n").toUtf8());
+    return sendControlLine(QStringLiteral("KEYUP %1").arg(name));
 }
 
 // Minimal ASCII text support: maps characters to KEY commands.
@@ -191,27 +192,43 @@ bool DosboxRunner::mouseMove(int dx, int dy)
     return sendControlLine(QStringLiteral("MOUSEMOVE %1 %2").arg(dx).arg(dy));
 }
 
-static QSettings makeSettings()
+void DosboxRunner::sendStartupSelections()
 {
-    const QString cfgBase =
-            QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    QDir().mkpath(cfgBase);
-    return QSettings(QDir(cfgBase).filePath("settings.ini"), QSettings::IniFormat);
+    // If process died, do nothing
+    if (m_proc.state() != QProcess::Running)
+        return;
+
+    auto sendDigit = [this](int d) {
+        // Your control socket expects KEYDOWN/KEYUP or the convenience "KEY <name>"
+        // You said KEY "1", "Return", "Space" works, so use KEY here.
+        sendControlLine(QString("KEY %1").arg(d));
+    };
+
+    const int g = qBound(1, m_startupGraphicsMode, 4);
+    const int s = qBound(1, m_startupSoundMode, 6);
+    const int c = qBound(1, m_startupControlMode, 2);
+
+    // Civ menus accept the digit immediately (you tested sending "1" only).
+    QTimer::singleShot(0,    this, [=]() { sendDigit(g); });
+    QTimer::singleShot(600,  this, [=]() { sendDigit(s); });
+    QTimer::singleShot(1200, this, [=]() { sendDigit(c); });
 }
+
+//static QSettings makeSettings()
+//{
+//    const QString cfgBase =
+//            QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+//    QDir().mkpath(cfgBase);
+//    return QSettings(QDir(cfgBase).filePath("settings.ini"), QSettings::IniFormat);
+//}
 
 // Constructor
 DosboxRunner::DosboxRunner(QObject *parent)
     : QObject(parent)
 {
     QDir().mkpath(civDir());
-
-    QSettings st = makeSettings();
-    m_cycles    = st.value(QStringLiteral("dosbox/cycles"),
-                           QStringLiteral("auto")).toString();
-    m_scaler    = st.value(QStringLiteral("dosbox/scaler"),
-                           QStringLiteral("normal2x")).toString();
-    m_windowRes = st.value(QStringLiteral("dosbox/windowRes"),
-                           QStringLiteral("original")).toString();
+    loadSettings();
+    rewriteConfigNow();
 }
 
 void DosboxRunner::rewriteConfigNow()
@@ -234,14 +251,69 @@ QString DosboxRunner::settingsIniPath() const
     return QDir(cfgBase).filePath(QStringLiteral("settings.ini"));
 }
 
+bool DosboxRunner::startupAutoSelect() const { return m_startupAutoSelect; }
+
+void DosboxRunner::setStartupAutoSelect(bool v)
+{
+    if (m_startupAutoSelect == v) return;
+    m_startupAutoSelect = v;
+    saveSetting("startup/autoSelect", m_startupAutoSelect);
+    emit startupAutoSelectChanged();
+}
+
+int DosboxRunner::startupGraphicsMode() const { return m_startupGraphicsMode; }
+
+void DosboxRunner::setStartupGraphicsMode(int v)
+{
+    v = qBound(1, v, 4);
+    if (m_startupGraphicsMode == v) return;
+    m_startupGraphicsMode = v;
+    saveSetting("startup/graphicsMode", m_startupGraphicsMode);
+    emit startupGraphicsModeChanged();
+}
+
+int DosboxRunner::startupSoundMode() const { return m_startupSoundMode; }
+
+void DosboxRunner::setStartupSoundMode(int v)
+{
+    v = qBound(1, v, 6);
+    if (m_startupSoundMode == v) return;
+    m_startupSoundMode = v;
+    saveSetting("startup/soundMode", m_startupSoundMode);
+    emit startupSoundModeChanged();
+}
+
+int DosboxRunner::startupControlMode() const { return m_startupControlMode; }
+
+void DosboxRunner::setStartupControlMode(int v)
+{
+    v = qBound(1, v, 2);
+    if (m_startupControlMode == v) return;
+    m_startupControlMode = v;
+    saveSetting("startup/controlMode", m_startupControlMode);
+    emit startupControlModeChanged();
+}
+
 void DosboxRunner::loadSettings()
 {
     QSettings st(settingsIniPath(), QSettings::IniFormat);
     st.beginGroup(QStringLiteral("dosbox"));
+
     m_windowRes = st.value(QStringLiteral("windowRes"), QStringLiteral("original")).toString();
     m_cycles    = st.value(QStringLiteral("cycles"),    QStringLiteral("auto")).toString();
     m_scaler    = st.value(QStringLiteral("scaler"),    QStringLiteral("normal2x")).toString();
+
+    m_startupAutoSelect   = st.value(QStringLiteral("startup/autoSelect"), true).toBool();
+    m_startupGraphicsMode = st.value(QStringLiteral("startup/graphicsMode"), 1).toInt();
+    m_startupSoundMode    = st.value(QStringLiteral("startup/soundMode"), 4).toInt();
+    m_startupControlMode  = st.value(QStringLiteral("startup/controlMode"), 1).toInt();
+
     st.endGroup();
+
+    // Clamp to valid ranges
+    m_startupGraphicsMode = qBound(1, m_startupGraphicsMode, 4);
+    m_startupSoundMode    = qBound(1, m_startupSoundMode, 6);
+    m_startupControlMode  = qBound(1, m_startupControlMode, 2);
 }
 
 void DosboxRunner::saveSetting(const QString &key, const QVariant &value) const
@@ -253,11 +325,6 @@ void DosboxRunner::saveSetting(const QString &key, const QVariant &value) const
     st.sync();
 }
 
-QString DosboxRunner::windowRes() const
-{
-    return m_windowRes;
-}
-
 void DosboxRunner::setWindowRes(const QString &value)
 {
     const QString v = value.trimmed();
@@ -265,9 +332,7 @@ void DosboxRunner::setWindowRes(const QString &value)
         return;
 
     m_windowRes = v;
-
-    QSettings st = makeSettings();
-    st.setValue(QStringLiteral("dosbox/windowRes"), m_windowRes);
+    saveSetting(QStringLiteral("windowRes"), m_windowRes);
 
     emit windowResChanged();
     rewriteConfigNow();
@@ -292,9 +357,7 @@ void DosboxRunner::setCycles(const QString &v)
         return;
 
     m_cycles = nv;
-
-    QSettings st = makeSettings();
-    st.setValue(QStringLiteral("dosbox/cycles"), m_cycles);
+    saveSetting(QStringLiteral("cycles"), m_cycles);
 
     emit settingsChanged();
     rewriteConfigNow();
@@ -307,9 +370,7 @@ void DosboxRunner::setScaler(const QString &v)
         return;
 
     m_scaler = nv;
-
-    QSettings st = makeSettings();
-    st.setValue(QStringLiteral("dosbox/scaler"), m_scaler);
+    saveSetting(QStringLiteral("scaler"), m_scaler);
 
     emit settingsChanged();
     rewriteConfigNow();
@@ -452,7 +513,13 @@ bool DosboxRunner::launch()
     m_proc.setProcessEnvironment(env);
 
     m_proc.start(dosbox, args);
-    return m_proc.waitForStarted(2000);
+//    return m_proc.waitForStarted(2000);
+    const bool started = m_proc.waitForStarted(2000);
+    if (started && m_startupAutoSelect) {
+        // Give DOSBox/Civ a moment to reach the first menu
+        QTimer::singleShot(900, this, [this]() { sendStartupSelections(); });
+    }
+    return started;
 }
 
 void DosboxRunner::openCivFolderInFileManager()

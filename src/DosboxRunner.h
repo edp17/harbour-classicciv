@@ -17,6 +17,11 @@ class DosboxRunner : public QObject
     Q_PROPERTY(QString scaler READ scaler WRITE setScaler NOTIFY settingsChanged)
     Q_PROPERTY(QString windowRes READ windowRes WRITE setWindowRes NOTIFY windowResChanged)
 
+    Q_PROPERTY(bool startupAutoSelect READ startupAutoSelect WRITE setStartupAutoSelect NOTIFY startupAutoSelectChanged)
+    Q_PROPERTY(int startupGraphicsMode READ startupGraphicsMode WRITE setStartupGraphicsMode NOTIFY startupGraphicsModeChanged)
+    Q_PROPERTY(int startupSoundMode READ startupSoundMode WRITE setStartupSoundMode NOTIFY startupSoundModeChanged)
+    Q_PROPERTY(int startupControlMode READ startupControlMode WRITE setStartupControlMode NOTIFY startupControlModeChanged)
+
 public:
     explicit DosboxRunner(QObject *parent = nullptr);
 
@@ -48,12 +53,28 @@ public:
     Q_INVOKABLE bool sendKeyUp(const QString &name);
     Q_INVOKABLE bool sendText(const QString &text);
 
+    bool startupAutoSelect() const;
+    void setStartupAutoSelect(bool v);
+
+    int startupGraphicsMode() const;
+    void setStartupGraphicsMode(int v);
+
+    int startupSoundMode() const;
+    void setStartupSoundMode(int v);
+
+    int startupControlMode() const;
+    void setStartupControlMode(int v);
+
 signals:
     void civDirChanged();
     void gameReadyChanged();
     void settingsChanged();
     void lastErrorChanged();
     void windowResChanged();
+    void startupAutoSelectChanged();
+    void startupGraphicsModeChanged();
+    void startupSoundModeChanged();
+    void startupControlModeChanged();
 
 private:
     QString appShareBinDosboxPath() const;
@@ -67,6 +88,7 @@ private:
     void loadSettings();
     void saveSetting(const QString &key, const QVariant &value) const;
     void rewriteConfigNow();
+    void sendStartupSelections();
 
 private:
     mutable QProcess m_proc;
@@ -86,4 +108,8 @@ private:
 
     QString controlSocketPath() const;
 
+    bool m_startupAutoSelect = true;
+    int m_startupGraphicsMode = 1; // 1..4
+    int m_startupSoundMode = 4;    // 1..6 (AdLib/SB default)
+    int m_startupControlMode = 1;  // 1..2
 };
