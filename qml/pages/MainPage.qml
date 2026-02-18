@@ -37,6 +37,10 @@ Page {
                 // If you don't have runner.stop(), remove this MenuItem.
                 onClicked: runner.stop()
             }
+            MenuItem {
+                text: "Settings"
+                onClicked: pageStack.push(Qt.resolvedUrl("SettingsPage.qml"))
+            }
         }
 
         Column {
