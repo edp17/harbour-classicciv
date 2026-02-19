@@ -91,6 +91,7 @@ struct OverlayState {
     bool enabled = true;       // overlay feature compiled in
     bool visible = false;      // toggled at runtime
     int height_px = 180;       // bottom overlay height; tweak as you like
+    bool keyboard_visible = false;
     int pad_px = 6;
     int gap_px = 6;
 
@@ -4475,22 +4476,57 @@ case SDL_FINGERUP: {
 			}
 			break; // end of SDL_WINDOWEVENT
 
-case SDL_MOUSEMOTION: {
-    int w = 0, h = 0;
-    SDL_GetWindowSize(sdl.window, &w, &h);
-    handle_mouse_motion(&event.motion); // use w/h inside your touch logic here (or store globally)
-} break;
+case SDL_MOUSEBUTTONDOWN:
+{
+    const int x = event.button.x;
+    const int y = event.button.y;
+    const SDL_Point p{ x, y };
+
+    // 1) Tap on the bottom-left square toggles the overlay visibility
+    if (g_overlay.enabled && SDL_PointInRect(&p, &g_overlay.toggle_rect)) {
+        g_overlay.visible = !g_overlay.visible;
+        break;
+    }
+
+    // 2) If overlay is visible and tap is inside the overlay band, treat it as an overlay tap
+    if (g_overlay.enabled && g_overlay.visible) {
+        int win_w = 0, win_h = 0;
+        SDL_GetWindowSize(sdl.window, &win_w, &win_h);
+        const int overlay_top_px = win_h - g_overlay.height_px;
+
+        if (y >= overlay_top_px) {
+            for (const auto& b : g_overlay.buttons) {
+                if (SDL_PointInRect(&p, &b.rect)) {
+                    inject_key_named(b.key); // b.key is KBD_KEYS
+                    break;
+                }
+            }
+            break; // swallow click (don’t pass to mouse)
+        }
+    }
+
+    // 3) Normal mouse handling
+    handle_mouse_button(&event.button);
+    break;
+}
+
+case SDL_MOUSEBUTTONUP:
+{
+    handle_mouse_button(&event.button);
+    break;
+}
+
+case SDL_MOUSEMOTION:
+{
+    handle_mouse_motion(&event.motion);
+    break;
+}
 
 case SDL_MOUSEWHEEL:
+{
     handle_mouse_wheel(&event.wheel);
     break;
-
-case SDL_MOUSEBUTTONDOWN:
-case SDL_MOUSEBUTTONUP: {
-    int w = 0, h = 0;
-    SDL_GetWindowSize(sdl.window, &w, &h);
-    handle_mouse_button(&event.button); // use w/h inside your touch logic here (or store globally)
-} break;
+}
 
 		case SDL_QUIT: GFX_RequestExit(true); break;
 #ifdef WIN32
