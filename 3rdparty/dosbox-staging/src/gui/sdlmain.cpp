@@ -32,6 +32,8 @@
 #include <sys/types.h>
 #include <tuple>
 #include <unistd.h>
+#include <vector>
+#include <chrono>
 
 #if C_DEBUG
 #include <queue>
@@ -78,6 +80,227 @@
 
 extern "C" void CONTROL_Socket_Start();
 extern "C" void CONTROL_Socket_Stop();
+
+struct OverlayButton {
+    SDL_Rect rect{};
+    const char* label = nullptr;   // ASCII label we draw
+    const char* key = nullptr;     // key name for injection, e.g. "A", "ENTER", "BACKSPACE"
+};
+
+struct OverlayState {
+    bool enabled = true;       // overlay feature compiled in
+    bool visible = false;      // toggled at runtime
+    int height_px = 180;       // bottom overlay height; tweak as you like
+    int pad_px = 6;
+    int gap_px = 6;
+
+    // Always-visible toggle tab (even when overlay hidden)
+    SDL_Rect toggle_rect{0, 0, 0, 0};
+
+    std::vector<OverlayButton> buttons;
+};
+
+static OverlayState g_overlay;
+
+static void draw_overlay(SDL_Renderer* r, SDL_Window* win)
+{
+
+g_overlay.enabled = true;
+//    if (!g_overlay.enabled)
+//	return;
+
+static int once = 0;
+if (!once++) LOG_INFO("OVERLAY: draw_overlay called, enabled=%d", (int)g_overlay.enabled);
+
+    int w = 0, h = 0;
+    SDL_GetWindowSize(win, &w, &h);
+
+    // Always draw toggle tab
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r, 32, 35, 42, 220);
+    SDL_RenderFillRect(r, &g_overlay.toggle_rect);
+
+    if (!g_overlay.visible)
+	return;
+
+    // Background
+    SDL_Rect bg{0, h - g_overlay.height_px, w, g_overlay.height_px};
+    SDL_SetRenderDrawColor(r, 32, 35, 42, 230);
+    SDL_RenderFillRect(r, &bg);
+
+    // Buttons
+    for (const auto& b : g_overlay.buttons) {
+	SDL_SetRenderDrawColor(r, 52, 58, 70, 240);
+	SDL_RenderFillRect(r, &b.rect);
+
+	SDL_SetRenderDrawColor(r, 90, 98, 112, 255);
+	SDL_RenderDrawRect(r, &b.rect);
+
+	// TODO: optional label drawing (next step)
+    }
+}
+
+static void rebuild_overlay_layout(SDL_Window* win)
+{
+    int w = 0, h = 0;
+    SDL_GetWindowSize(win, &w, &h);
+
+    // Toggle tab: a small always-visible button at bottom-left
+    const int tab = 44;
+    g_overlay.toggle_rect = { 8, h - tab - 8, tab, tab };
+
+    g_overlay.buttons.clear();
+    if (!g_overlay.visible)
+	return;
+
+    const int overlay_top = h - g_overlay.height_px;
+    const int pad = g_overlay.pad_px;
+    const int gap = g_overlay.gap_px;
+
+    auto add = [&](int x, int y, int bw, int bh, const char* label, const char* key) {
+	OverlayButton b;
+	b.rect = { x, y, bw, bh };
+	b.label = label;
+	b.key = key;
+	g_overlay.buttons.push_back(b);
+    };
+
+    // Simple keyboard row examples (tweak sizes)
+    const int bh = 42;
+    int y = overlay_top + pad;
+
+    // Row 1: 1..0 and Backspace
+    int x = pad;
+    const int bw = 38;
+    for (const char* k : {"1","2","3","4","5","6","7","8","9","0"}) {
+	add(x, y, bw, bh, k, k);
+	x += bw + gap;
+    }
+    add(x, y, 90, bh, "⌫", "BACKSPACE");
+
+    // Row 2: QWERTY
+    y += bh + gap;
+    x = pad;
+    for (const char* k : {"Q","W","E","R","T","Y","U","I","O","P"}) {
+	add(x, y, bw, bh, k, k);
+	x += bw + gap;
+    }
+
+    // Row 3: ASDF + Enter
+    y += bh + gap;
+    x = pad;
+    for (const char* k : {"A","S","D","F","G","H","J","K","L"}) {
+	add(x, y, bw, bh, k, k);
+	x += bw + gap;
+    }
+    add(x, y, 90, bh, "⏎", "ENTER");
+
+    // Row 4: ZXCV + Space
+    y += bh + gap;
+    x = pad;
+    for (const char* k : {"Z","X","C","V","B","N","M"}) {
+	add(x, y, bw, bh, k, k);
+	x += bw + gap;
+    }
+    add(x, y, 140, bh, "␠", "SPACE");
+}
+
+static int env_to_int(const char* name, int def)
+{
+    if (const char* v = std::getenv(name)) {
+        const int n = std::atoi(v);
+        if (n > 0) return n;
+    }
+    return def;
+}
+
+static void inject_key_named(const char* name)
+{
+    // Minimal mapping: letters, digits, and a few named keys.
+    // Expand as needed.
+    if (!name || !*name) return;
+
+    auto press_release = [](KBD_KEYS k) {
+	KEYBOARD_AddKey(k, true);
+	KEYBOARD_AddKey(k, false);
+    };
+
+    // Single-letter A..Z
+    if (name[1] == '\0' && name[0] >= 'A' && name[0] <= 'Z') {
+	const int idx = name[0] - 'A';
+	press_release(static_cast<KBD_KEYS>(KBD_KEYS::KBD_a + idx));
+	return;
+    }
+
+    // Single-digit 0..9
+    if (name[1] == '\0' && name[0] >= '0' && name[0] <= '9') {
+	// KBD_0..KBD_9 exist in DOSBox key enum in most trees
+	switch (name[0]) {
+	case '0': press_release(KBD_KEYS::KBD_0); return;
+	case '1': press_release(KBD_KEYS::KBD_1); return;
+	case '2': press_release(KBD_KEYS::KBD_2); return;
+	case '3': press_release(KBD_KEYS::KBD_3); return;
+	case '4': press_release(KBD_KEYS::KBD_4); return;
+	case '5': press_release(KBD_KEYS::KBD_5); return;
+	case '6': press_release(KBD_KEYS::KBD_6); return;
+	case '7': press_release(KBD_KEYS::KBD_7); return;
+	case '8': press_release(KBD_KEYS::KBD_8); return;
+	case '9': press_release(KBD_KEYS::KBD_9); return;
+	}
+    }
+
+    // Named keys
+    if (!std::strcmp(name, "ENTER"))     { press_release(KBD_KEYS::KBD_enter); return; }
+    if (!std::strcmp(name, "SPACE"))     { press_release(KBD_KEYS::KBD_space); return; }
+    if (!std::strcmp(name, "TAB"))       { press_release(KBD_KEYS::KBD_tab); return; }
+    if (!std::strcmp(name, "ESC"))       { press_release(KBD_KEYS::KBD_esc); return; }
+    if (!std::strcmp(name, "BACKSPACE")) { press_release(KBD_KEYS::KBD_backspace); return; }
+
+    if (!std::strcmp(name, "UP"))        { press_release(KBD_KEYS::KBD_up); return; }
+    if (!std::strcmp(name, "DOWN"))      { press_release(KBD_KEYS::KBD_down); return; }
+    if (!std::strcmp(name, "LEFT"))      { press_release(KBD_KEYS::KBD_left); return; }
+    if (!std::strcmp(name, "RIGHT"))     { press_release(KBD_KEYS::KBD_right); return; }
+
+    // Add more as you need (F-keys, etc.)
+}
+
+struct TouchState {
+    bool active = false;
+    SDL_FingerID fid = 0;
+    int start_x = 0;
+    int start_y = 0;
+    int last_x = 0;
+    int last_y = 0;
+    uint32_t down_ticks = 0;
+    bool moved = false;
+    bool longpress_fired = false;
+};
+
+static TouchState g_touch;
+
+// Defaults; override via env vars like you already do
+static int g_longpress_ms = 450;
+static int g_tap_max_ms = 220;
+static int g_jitter_px = 18;
+
+static void sdl_push_mouse_button(uint8_t button, bool down)
+{
+    SDL_Event e{};
+    e.type = down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+    e.button.button = button;
+    e.button.state = down ? SDL_PRESSED : SDL_RELEASED;
+    e.button.clicks = 1;
+    SDL_PushEvent(&e);
+}
+
+static void sdl_push_mouse_motion(int dx, int dy)
+{
+    SDL_Event e{};
+    e.type = SDL_MOUSEMOTION;
+    e.motion.xrel = dx;
+    e.motion.yrel = dy;
+    SDL_PushEvent(&e);
+}
 
 static void switch_console_to_utf8()
 {
@@ -2231,6 +2454,10 @@ uint8_t GFX_SetSize(const int render_width_px, const int render_height_px,
 	}
 	// Ensure mouse emulation knows the current parameters
 	notify_new_mouse_screen_params();
+	rebuild_overlay_layout(sdl.window);
+LOG_INFO("OVERLAY: toggle rect %d,%d %dx%d",
+         g_overlay.toggle_rect.x, g_overlay.toggle_rect.y,
+         g_overlay.toggle_rect.w, g_overlay.toggle_rect.h);
 	update_vsync_mode();
 
 	if (sdl.draw.has_changed) {
@@ -2688,7 +2915,7 @@ static bool present_frame_texture()
 				CAPTURE_AddPostRenderImage(*image);
 			}
 		}
-
+		draw_overlay(sdl.renderer, sdl.window);
 		SDL_RenderPresent(sdl.renderer);
 	}
 	render_pacer->Checkpoint();
@@ -3409,6 +3636,10 @@ static void set_output(Section* sec, const bool wants_aspect_ratio_correction)
 	GFX_RefreshTitle();
 
 	RENDER_Reinit();
+	rebuild_overlay_layout(sdl.window);
+LOG_INFO("OVERLAY: toggle rect %d,%d %dx%d",
+         g_overlay.toggle_rect.x, g_overlay.toggle_rect.y,
+         g_overlay.toggle_rect.w, g_overlay.toggle_rect.h);
 }
 
 // extern void UI_Run(bool);
@@ -3853,6 +4084,96 @@ bool GFX_Events()
 		}
 		switch (event.type) {
 		case SDL_DISPLAYEVENT:
+case SDL_FINGERDOWN: {
+    // Convert 0..1 to window pixels
+    int w = 0, h = 0;
+    SDL_GetWindowSize(sdl.window, &w, &h);
+    const int x = int(event.tfinger.x * w);
+    const int y = int(event.tfinger.y * h);
+
+    // If overlay toggle tab tapped: toggle and swallow
+    SDL_Point p{ x, y };
+    if (g_overlay.enabled && SDL_PointInRect(&p, &g_overlay.toggle_rect)) {
+	g_overlay.visible = !g_overlay.visible;
+	break;
+    }
+
+    // If overlay visible and touch is inside overlay area -> handle overlay, swallow
+    if (g_overlay.enabled && g_overlay.visible) {
+	const int overlay_top = h - g_overlay.height_px;
+	if (y >= overlay_top) {
+	    // Hit-test buttons
+	    for (const auto& b : g_overlay.buttons) {
+		SDL_Point p{ x, y };
+		if (SDL_PointInRect(&p, &b.rect)) {
+		    inject_key_named(b.key);
+		    break;
+		}
+	    }
+	    break;
+	}
+    }
+
+    // Otherwise start touchpad gesture (NO click on down!)
+    g_touch.active = true;
+    g_touch.fid = event.tfinger.fingerId;
+    g_touch.start_x = g_touch.last_x = x;
+    g_touch.start_y = g_touch.last_y = y;
+    g_touch.down_ticks = SDL_GetTicks();
+    g_touch.moved = false;
+    g_touch.longpress_fired = false;
+    break;
+}
+
+case SDL_FINGERMOTION: {
+    if (!g_touch.active || event.tfinger.fingerId != g_touch.fid)
+	break;
+
+    int w = 0, h = 0;
+    SDL_GetWindowSize(sdl.window, &w, &h);
+    const int x = int(event.tfinger.x * w);
+    const int y = int(event.tfinger.y * h);
+
+    const int dx = x - g_touch.last_x;
+    const int dy = y - g_touch.last_y;
+
+    g_touch.last_x = x;
+    g_touch.last_y = y;
+
+    const int total_dx = x - g_touch.start_x;
+    const int total_dy = y - g_touch.start_y;
+
+    if (!g_touch.moved) {
+	if (std::abs(total_dx) >= g_jitter_px || std::abs(total_dy) >= g_jitter_px)
+	    g_touch.moved = true;
+    }
+
+    // Touchpad-style: move cursor while dragging
+    if (dx || dy)
+	sdl_push_mouse_motion(dx, dy);
+
+    break;
+}
+
+case SDL_FINGERUP: {
+    if (!g_touch.active || event.tfinger.fingerId != g_touch.fid)
+	break;
+
+    const uint32_t elapsed = SDL_GetTicks() - g_touch.down_ticks;
+
+    // Long-press right click (if not moved much and longpress not already fired)
+    if (!g_touch.moved && elapsed >= (uint32_t)g_longpress_ms) {
+	sdl_push_mouse_button(SDL_BUTTON_RIGHT, true);
+	sdl_push_mouse_button(SDL_BUTTON_RIGHT, false);
+    } else if (!g_touch.moved && elapsed <= (uint32_t)g_tap_max_ms) {
+	// Tap = left click on release (fixes your current “click on down” bug)
+	sdl_push_mouse_button(SDL_BUTTON_LEFT, true);
+	sdl_push_mouse_button(SDL_BUTTON_LEFT, false);
+    }
+
+    g_touch.active = false;
+    break;
+}
 			switch (event.display.event) {
 #if (SDL_MAJOR_VERSION > 2 || SDL_MINOR_VERSION > 0 || SDL_PATCHLEVEL >= 14)
 			// Events added in SDL 2.0.14
@@ -4144,10 +4465,22 @@ bool GFX_Events()
 			}
 			break; // end of SDL_WINDOWEVENT
 
-		case SDL_MOUSEMOTION: handle_mouse_motion(&event.motion); break;
-		case SDL_MOUSEWHEEL: handle_mouse_wheel(&event.wheel); break;
-		case SDL_MOUSEBUTTONDOWN:
-		case SDL_MOUSEBUTTONUP: handle_mouse_button(&event.button); break;
+case SDL_MOUSEMOTION: {
+    int w = 0, h = 0;
+    SDL_GetWindowSize(sdl.window, &w, &h);
+    handle_mouse_motion(&event.motion); // use w/h inside your touch logic here (or store globally)
+} break;
+
+case SDL_MOUSEWHEEL:
+    handle_mouse_wheel(&event.wheel);
+    break;
+
+case SDL_MOUSEBUTTONDOWN:
+case SDL_MOUSEBUTTONUP: {
+    int w = 0, h = 0;
+    SDL_GetWindowSize(sdl.window, &w, &h);
+    handle_mouse_button(&event.button); // use w/h inside your touch logic here (or store globally)
+} break;
 
 		case SDL_QUIT: GFX_RequestExit(true); break;
 #ifdef WIN32
@@ -4953,6 +5286,9 @@ int sdl_main(int argc, char* argv[])
 		}
 
 		sdl.initialized = true;
+g_longpress_ms = env_to_int("HARBOUR_CIV_LONGPRESS_MS", 450);
+g_tap_max_ms   = env_to_int("HARBOUR_CIV_TAP_MAX_MS", 220);
+g_jitter_px    = env_to_int("HARBOUR_CIV_JITTER_PX", 18);
 CONTROL_Socket_Start();
 
 		SDL_version sdl_version = {};
