@@ -142,6 +142,10 @@ if (!once++) LOG_INFO("OVERLAY: draw_overlay called, enabled=%d", (int)g_overlay
 
 static void rebuild_overlay_layout(SDL_Window* win)
 {
+
+//    if (!g_overlay.enable)
+//	return;
+
     int w = 0, h = 0;
     SDL_GetWindowSize(win, &w, &h);
 
@@ -150,8 +154,8 @@ static void rebuild_overlay_layout(SDL_Window* win)
     g_overlay.toggle_rect = { 8, h - tab - 8, tab, tab };
 
     g_overlay.buttons.clear();
-    if (!g_overlay.visible)
-	return;
+//    if (!g_overlay.visible)
+//	return;
 
     const int overlay_top = h - g_overlay.height_px;
     const int pad = g_overlay.pad_px;
@@ -806,6 +810,11 @@ static bool is_command_pressed(const SDL_Event event)
 		case SDL_QUIT: GFX_RequestExit(true); break;
 
 		case SDL_WINDOWEVENT:
+			if (event.window.event == SDL_WINDOWEVENT_RESIZED ||
+				event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+			        rebuild_overlay_layout(sdl.window);
+		        }
+		        break;
 			if (event.window.event == SDL_WINDOWEVENT_RESTORED) {
 				// We may need to re-create a texture and more
 				GFX_ResetScreen();
@@ -1605,6 +1614,7 @@ static SDL_Window* SetWindowMode(const RenderingBackend rendering_backend,
 
 			assert(sdl.renderer == nullptr);
 			sdl.renderer = SDL_CreateRenderer(sdl.window, -1, 0);
+			rebuild_overlay_layout(sdl.window);
 			if (!sdl.renderer) {
 				LOG_ERR("SDL: Failed to create renderer: %s",
 				        SDL_GetError());
