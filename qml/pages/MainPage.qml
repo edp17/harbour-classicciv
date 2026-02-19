@@ -87,7 +87,7 @@ Page {
                         spacing: Theme.paddingSmall
 
                         Button { width: page.keyWide; height: page.keyH; text: "⎋";   onClicked: page.k("ESC") }
-                        Button { width: page.keyWide; height: page.keyH; text: "⏎"; onClicked: page.k("ENTER") }
+                        Button { width: page.keyWide; height: page.keyH; text: "⏎"; onClicked: page.k("RETURN") }
                         Button { width: page.keyWide; height: page.keyH; text: "␠"; onClicked: page.k("SPACE") }
                         Button { width: page.keyWide; height: page.keyH; text: "⇥";   onClicked: page.k("TAB") }
                         Button { width: page.keyWide; height: page.keyH; text: "⌫";  onClicked: page.k("BACKSPACE") }
@@ -223,7 +223,7 @@ Page {
                     Button { width: page.keyW; height: page.keyH; text: "J"; onClicked: page.k("J") }
                     Button { width: page.keyW; height: page.keyH; text: "K"; onClicked: page.k("K") }
                     Button { width: page.keyW; height: page.keyH; text: "L"; onClicked: page.k("L") }
-                    Button { width: page.keyWide; height: page.keyH; text: "⏎"; onClicked: page.k("ENTER") }
+                    Button { width: page.keyWide; height: page.keyH; text: "⏎"; onClicked: page.k("RETURN") }
                 }
 
                 // Row 4
